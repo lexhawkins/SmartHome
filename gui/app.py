@@ -66,9 +66,12 @@ class SmartHomeApp(tk.Tk):
 
         # File actions
         ttk.Separator(frame).pack(fill="x", pady=8)
+        ttk.Label(frame, text="File Operations", font=("Arial", 12, "bold")).pack(anchor="w", pady=(10, 0))
+        self.btn_create_new = ttk.Button(frame, text="Create New File", command=self.create_new_file)
         self.btn_save = ttk.Button(frame, text="Save file", command=self.save_place_to_file)
         self.btn_save_as = ttk.Button(frame, text="Save As...", command=self.save_place_as)
         self.btn_open = ttk.Button(frame, text="Open...", command=self.open_place_file)
+        self.btn_create_new.pack(fill="x", pady=2)
         self.btn_save.pack(fill="x", pady=2)
         self.btn_save_as.pack(fill="x", pady=2)
         self.btn_open.pack(fill="x", pady=2)
@@ -341,6 +344,21 @@ class SmartHomeApp(tk.Tk):
         filename = filedialog.askopenfilename(title="Open Place File", filetypes=[("SmartHome DSL", "*.shl")])
         if filename:
             self.load_place_from_file(filename)
+
+    def create_new_file(self):
+        filename = filedialog.asksaveasfilename(title="Create Place File", defaultextension=".shl",
+                                                filetypes=[("SmartHome DSL", "*.shl")])
+        if filename:
+            base_name = os.path.splitext(os.path.basename(filename))[0]
+            self.place = Place(base_name)
+            self.place_file = filename
+            self.place.locations = []
+            self.place.rules = []
+            self.place.scenes = []
+            self.save_place_to_file()
+            self.refresh_locations_list()
+            self.refresh_dsl_preview()
+            self.enable_all_actions()
 
     # -----------------------------
     # DSL Parsing
