@@ -1,0 +1,50 @@
+<MODEL> ::= <PLACE>+
+
+<PLACE> ::= "place" <ID> ":" <PLACE_CONTENT>* "end"
+<PLACE_CONTENT> ::= <PLACE_LOCATION> | <RULE_DEFINITION> | <SCENE_DEFINITION>
+
+<PLACE_LOCATION> ::= "location" <ID> ":" <DEVICE_DEFINITION>* "end"
+
+<DEVICE_DEFINITION> ::= "device" <ID> ":" <DEVICE_TYPE>
+
+<DEVICE_TYPE> ::= "AC" | "Alarm" | "Camera" | "Light" | "Lock" | "Sensor" | "SmartSpeaker" | "Thermometer" | "Thermostat"
+
+<RULE_DEFINITION> ::= "rule" <STRING> ":" <CONDITION_BLOCK> <ACTION_BLOCK> "end"
+
+<SCENE_DEFINITION> ::= "scene" <STRING> "at" <ID> ":" <ACTION_BLOCK> "end"
+
+<CONDITION_BLOCK> ::= "if" <CONDITION>
+
+<CONDITION> ::= <SENSOR_CONDITION> 
+              | <SENSOR_COMPARISON_CONDITION> 
+              | <STATE_CONDITION> 
+              | <TIME_CONDITION> 
+              | <SUSPICIOUS_MOTION_CONDITION>
+
+<SENSOR_CONDITION> ::= <ID> "detects" <STRING>
+
+<SENSOR_COMPARISON_CONDITION> ::= <ID> <COMPARISON_OPERATOR> <INT>
+
+<STATE_CONDITION> ::= <ID> "is" <STATE>
+
+<TIME_CONDITION> ::= "Schedule" <STRING>
+
+<SUSPICIOUS_MOTION_CONDITION> ::= <ID> "detects" <STRING> "between" <STRING> "and" <STRING>
+
+<ACTION_BLOCK> ::= "do" <ACTION>+
+
+<ACTION> ::= <ID> <COMMAND_ACTION> [<VALUE>]
+
+<COMMAND_ACTION> ::= "turn_on" | "turn_off" | "lock" | "unlock" | "set_temperature" 
+                   | "set_brightness" | "play_music" | "activate" | "deactivate" 
+                   | "record" | "stop" | "announce" | "send_alarm"
+
+<STATE> ::= "on" | "off" | "locked" | "unlocked" | "open" | "closed" | "active" | "inactive"
+
+<COMPARISON_OPERATOR> ::= ">" | "<" | "="
+
+<VALUE> ::= <INT> | <STATE>
+
+<ID> ::= /* identifier token, e.g., letters, digits, underscore */
+<STRING> ::= /* string token, e.g., double-quoted text */
+<INT> ::= /* integer token */
