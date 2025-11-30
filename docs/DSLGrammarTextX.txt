@@ -1,0 +1,120 @@
+grammar = r"""
+Model:
+    /*Needs at least ONE place defined*/
+    places+=Place
+;
+
+Place:
+    'place' name=ID':' 
+        (locations+=PlaceLocation
+        | rules+=RuleDefinition
+        | scenes+=SceneDefinition
+        )*
+    'end'
+;
+
+PlaceLocation:
+    'location' name=ID':' 
+        (devices+=DeviceDefinition
+        )*
+    'end'
+;
+
+DeviceDefinition:
+    'device' name=ID':' type=DeviceType
+;
+
+DeviceType:
+      'AC' 
+    | 'Alarm'
+    | 'Camera' 
+    | 'Light' 
+    | 'Lock' 
+    | 'Sensor' 
+    | 'SmartSpeaker' 
+    | 'Thermometer'
+    | 'Thermostat' 
+;
+
+RuleDefinition:
+    'rule' name=STRING':'
+        condition_block=ConditionBlock
+        action_block=ActionBlock
+    'end'
+;
+
+SceneDefinition:
+    'scene' name=STRING 'at' location=[PlaceLocation]':'
+        action_block=ActionBlock
+    'end'
+;
+
+ConditionBlock:
+    'if' condition=Condition
+;
+
+ActionBlock:
+    ('do' actions+=Action)+
+;
+
+Condition:
+      SensorCondition
+    | SensorComparisonCondition
+    | StateCondition
+    | TimeCondition
+    | SuspiciousMotionCondition
+;
+
+SensorCondition:
+    device=[DeviceDefinition] 'detects' event=STRING
+;
+
+SensorComparisonCondition:
+    device=[DeviceDefinition] op=ComparisonOperator value=INT
+;
+
+StateCondition:
+    device=[DeviceDefinition] 'is' state=State
+;
+
+TimeCondition:
+    'Schedule' trigger=STRING
+;
+
+SuspiciousMotionCondition:
+    device=[DeviceDefinition] 'detects' event=STRING 'between' start_time=STRING 'and' end_time=STRING
+;
+
+Action:
+    device=[DeviceDefinition] command=CommandAction (value=Value)?
+;
+
+CommandAction:
+      'turn_on' 
+    | 'turn_off' 
+    | 'lock' 
+    | 'unlock' 
+    | 'set_temperature' 
+    | 'set_brightness'
+    | 'play_music' 
+    | 'activate' 
+    | 'deactivate' 
+    | 'record' 
+    | 'stop' 
+    | 'announce' 
+    | 'send_alarm'
+;
+
+State:
+    'on' | 'off' | 'locked' | 'unlocked' | 'open' | 'closed' | 'active' | 'inactive'
+;
+
+ComparisonOperator: '>' | '<' | '=';
+
+Value: INT | State;
+
+Comment:
+      /\/\/.*$/
+    | /\/\*.*?\*\//
+;
+"""
