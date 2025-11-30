@@ -19,3 +19,10 @@ DEVICE_TYPES = [
     "SmartSpeaker",
     "Alarm",
 ]
+
+ACTIONS_WITH_ARGS = {
+    "set_brightness": "int",
+    "set_temperature": "int",
+    "play_music": "str",
+    "announce": "str",
+}
