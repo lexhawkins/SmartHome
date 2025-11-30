@@ -154,11 +154,50 @@ class SmartHomeApp(tk.Tk):
     def add_location(self):
         if not self.place:
             return
-        name = simpledialog.askstring("Add Location", "Location name:")
-        if name:
-            self.place.locations.append(Location(name=name.replace(" ", "")))
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Add Location")
+
+        # Make dialog modal and always on top
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.attributes("-topmost", True)
+
+        # Layout
+        dlg.columnconfigure(0, weight=1)
+
+        ttk.Label(dlg, text="Location name:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        name_entry = ttk.Entry(dlg)
+        name_entry.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+        name_entry.focus_set()
+
+        def save_location():
+            name = name_entry.get().strip().replace(" ", "")
+            if not name:
+                messagebox.showerror("Error", "Location name cannot be empty.", parent=dlg)
+                return
+
+            if any(loc.name.lower() == name.lower() for loc in self.place.locations):
+                messagebox.showerror("Error", f"Location '{name}' already exists.", parent=dlg)
+                return
+
+            self.place.locations.append(Location(name=name))
             self.refresh_locations_list()
             self.refresh_dsl_preview()
+            dlg.destroy()
+
+        ttk.Button(dlg, text="Add", command=save_location).grid(row=2, column=0, padx=10, pady=10)
+
+        # Center the dialog and set a minimum size
+        dlg.update_idletasks()
+        width = 300
+        height = dlg.winfo_reqheight()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        dlg.geometry(f'{width}x{height}+{x}+{y}')
+        dlg.minsize(width, height)
+
+        self.wait_window(dlg)
 
     def remove_location(self):
         idx = self.get_selected_index(self.location_list)
@@ -175,6 +214,8 @@ class SmartHomeApp(tk.Tk):
     # -----------------------------
     # Device Handlers
     # -----------------------------
+    # TODO: Update to support device types
+    # TODO: DOCUMENT CHANGE
     def add_device(self):
         if not self.place or not self.place.locations:
             messagebox.showwarning("Error", "Create at least one location first.")
@@ -182,44 +223,58 @@ class SmartHomeApp(tk.Tk):
 
         dlg = tk.Toplevel(self)
         dlg.title("Add Device")
-        dlg.geometry("300x200")
+
+        # Make dialog modal and always on top
         dlg.transient(self)
         dlg.grab_set()
+        dlg.attributes("-topmost", True)
 
+        # Configure grid layout
+        dlg.columnconfigure(0, weight=1)
+        dlg.columnconfigure(1, weight=2)
 
-        ttk.Label(dlg, text="Select Device Type:").pack(anchor="w", padx=10)
+        ttk.Label(dlg, text="Select Device Type:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
         dev_type_combo = ttk.Combobox(dlg, values=DEVICE_TYPES, state="readonly")
-        dev_type_combo.pack(fill="x", padx=10, pady=5)
+        dev_type_combo.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
-        ttk.Label(dlg, text="Device Name:").pack(anchor="w", padx=10, pady=(10,0))
+        ttk.Label(dlg, text="Device Name:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
         name_entry = ttk.Entry(dlg)
-        name_entry.pack(fill="x", padx=10, pady=5)
+        name_entry.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
 
-        ttk.Label(dlg, text="Select Location:").pack(anchor="w", padx=10)
+        ttk.Label(dlg, text="Select Location:").grid(row=2, column=0, padx=10, pady=5, sticky="w")
         loc_combo = ttk.Combobox(dlg, values=[loc.name for loc in self.place.locations], state="readonly")
-        loc_combo.pack(fill="x", padx=10, pady=5)
-        loc_combo.current(0)
+        loc_combo.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
+        if loc_combo["values"]:
+            loc_combo.current(0)
 
         def save_device():
-
             device_type = dev_type_combo.get()
             if not device_type:
-                messagebox.showerror("Error", "Device type required.")
+                messagebox.showerror("Error", "Device type required.", parent=dlg)
                 return
-
-            name = name_entry.get()
+            name = name_entry.get().strip()
             if not name:
-                messagebox.showerror("Error", "Device name required.")
+                messagebox.showerror("Error", "Device name required.", parent=dlg)
                 return
-
             location = next((l for l in self.place.locations if l.name == loc_combo.get()), None)
             if location:
                 location.add_device(Device(name=name, device_type=device_type))
                 self.refresh_dsl_preview()
             dlg.destroy()
 
+        ttk.Button(dlg, text="Add", command=save_device).grid(row=3, column=0, columnspan=2, pady=10)
 
-        ttk.Button(dlg, text="Add", command=save_device).pack(pady=10)
+        # Center the dialog on the screen
+        dlg.update_idletasks() # Update "requested size"
+        width = 350
+        height = dlg.winfo_reqheight()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        dlg.geometry(f'{width}x{height}+{x}+{y}')
+        dlg.minsize(width, height)
+
+        # Wait for the dialog to be closed before returning
+        self.wait_window(dlg)
 
     def remove_device(self):
         if not self.place or not self.place.locations:
