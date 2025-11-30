@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
 from models.models import *
-from models.constants import DEVICE_TYPES
+from models.constants import DEVICE_TYPES, DEVICE_FUNCTIONALITIES, ACTIONS_WITH_ARGS
 import os
 import re
 
@@ -304,13 +304,137 @@ class SmartHomeApp(tk.Tk):
             self.refresh_dsl_preview()
 
     def add_scene(self):
-        if not self.place:
+        if not self.place or not self.place.locations:
+            messagebox.showwarning("No Locations", "Please create a location before adding a scene.")
             return
-        name = simpledialog.askstring("Add Scene", "Scene name:")
-        location = simpledialog.askstring("Scene Location", "Enter location:") if name else None
-        if name and location:
-            self.place.scenes.append(Scene(name=name, location=location))
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Add Scene")
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.attributes("-topmost", True)
+
+        dlg.columnconfigure(1, weight=1)
+
+        # Location
+        ttk.Label(dlg, text="Location:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        loc_combo = ttk.Combobox(dlg, values=[loc.name for loc in self.place.locations], state="readonly")
+        loc_combo.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+
+        # Scene Name
+        ttk.Label(dlg, text="Scene Name:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        name_entry = ttk.Entry(dlg)
+        name_entry.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+
+        # Actions Frame
+        actions_frame = ttk.LabelFrame(dlg, text="Actions")
+        actions_frame.grid(row=2, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        actions_frame.columnconfigure(1, weight=1)
+
+        actions = []
+        
+        def add_action_row():
+            row_index = len(actions)
+            
+            ttk.Label(actions_frame, text="do:").grid(row=row_index, column=0, padx=5, pady=5, sticky="w")
+            
+            device_combo = ttk.Combobox(actions_frame, state="readonly")
+            device_combo.grid(row=row_index, column=1, padx=5, pady=5, sticky="ew")
+
+            action_combo = ttk.Combobox(actions_frame, state="readonly")
+            action_combo.grid(row=row_index, column=2, padx=5, pady=5, sticky="ew")
+            
+            arg_frame = ttk.Frame(actions_frame)
+            arg_frame.grid(row=row_index, column=3, padx=5, pady=5, sticky="ew")
+
+            actions.append({'device_combo': device_combo, 'action_combo': action_combo, 'arg_frame': arg_frame, 'arg_widget': None})
+
+            def on_device_select(event):
+                selected_device_name = device_combo.get()
+                # Clear previous action and arg
+                selected_loc_name = loc_combo.get()
+                location = next((l for l in self.place.locations if l.name == selected_loc_name), None)
+                device = next((d for d in location.devices if d.name == selected_device_name), None)
+                if device:
+                    action_combo['values'] = DEVICE_FUNCTIONALITIES.get(device.device_type, [])
+                    action_combo.current(0 if action_combo['values'] else -1)
+
+            def on_action_select(event):
+                action_name = action_combo.get()
+                action_set = next(item for item in actions if item['action_combo'] == action_combo)
+
+                # Clear previous arg widget
+                if action_set['arg_widget']:
+                    action_set['arg_widget'].destroy()
+                    action_set['arg_widget'] = None
+
+                if action_name in ACTIONS_WITH_ARGS:
+                    arg_type = ACTIONS_WITH_ARGS[action_name]
+                    arg_entry = ttk.Entry(action_set['arg_frame'])
+                    arg_entry.pack(fill="x", expand=True)
+                    arg_entry.insert(0, f"<{arg_type}>")
+                    action_set['arg_widget'] = arg_entry
+
+            action_combo.bind("<<ComboboxSelected>>", on_action_select)
+
+            # If a location is already selected, populate this new row's device list
+            selected_loc_name = loc_combo.get()
+            if selected_loc_name:
+                location = next((l for l in self.place.locations if l.name == selected_loc_name), None)
+                if location:
+                    device_names = [dev.name for dev in getattr(location, "devices", [])]
+                    device_combo['values'] = device_names
+
+
+            device_combo.bind("<<ComboboxSelected>>", on_device_select)
+
+        def on_location_select(event):
+            loc_name = loc_combo.get()
+            location = next((l for l in self.place.locations if l.name == loc_name), None)
+            if location:
+                device_names = [dev.name for dev in getattr(location, "devices", [])]
+                for action_set in actions:
+                    action_set['device_combo']['values'] = device_names
+                    action_set['device_combo'].set('')
+                    action_set['action_combo'].set('')
+                    action_set['action_combo']['values'] = []
+
+        loc_combo.bind("<<ComboboxSelected>>", on_location_select)
+
+        add_action_row() # Start with one action row
+
+        ttk.Button(actions_frame, text="+", command=add_action_row, width=2).grid(row=100, column=2, padx=5, pady=5, sticky="e")
+
+        def save_scene():
+            name = name_entry.get().strip()
+            loc_name = loc_combo.get()
+            if not name or not loc_name:
+                messagebox.showerror("Error", "Scene Name and Location are required.", parent=dlg)
+                return
+
+            scene_actions = []
+            for action_set in actions:
+                device_name = action_set['device_combo'].get()
+                action_name = action_set['action_combo'].get()
+                if device_name and action_name:
+                    arg_widget = action_set.get('arg_widget')
+                    if arg_widget:
+                        arg_value = arg_widget.get()
+                        scene_actions.append(f"{device_name} {action_name} {arg_value}")
+                    else:
+                        scene_actions.append(f"{device_name} {action_name}")
+
+
+            scene = Scene(name=name, location=loc_name, actions=scene_actions)
+            self.place.scenes.append(scene)
             self.refresh_dsl_preview()
+            dlg.destroy()
+
+        ttk.Button(dlg, text="Save Scene", command=save_scene).grid(row=3, column=0, columnspan=2, pady=10)
+
+        dlg.update_idletasks()
+        dlg.minsize(dlg.winfo_reqwidth(), dlg.winfo_reqheight())
+        self.wait_window(dlg)
 
     # -----------------------------
     # DSL Preview
@@ -346,8 +470,10 @@ class SmartHomeApp(tk.Tk):
         lines.append("    // Scenes")
         for scene in getattr(self.place, "scenes", []):
             lines.append(f'    scene "{scene.name}" at {scene.location}:')
-            lines.append("        do ...")
+            for action in getattr(scene, 'actions', []):
+                lines.append(f"        do {action}")  # Each action starts with 'do'
             lines.append("    end\n")
+
 
         lines.append("end")
         return "\n".join(lines)
