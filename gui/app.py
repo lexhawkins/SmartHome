@@ -56,6 +56,8 @@ class SmartHomeApp(tk.Tk):
         self.btn_remove_device = ttk.Button(frame, text="Remove Device", command=self.remove_device)
         self.btn_add_device.pack(fill="x", pady=2)
         self.btn_remove_device.pack(fill="x", pady=2)
+        self.btn_view_devices = ttk.Button(frame, text="See All Devices", command=self.show_all_devices)
+        self.btn_view_devices.pack(fill="x", pady=2)
 
         # Rules & Scenes
         ttk.Label(frame, text="Rules & Scenes", font=("Arial", 12, "bold")).pack(anchor="w", pady=(10, 0))
@@ -291,6 +293,63 @@ class SmartHomeApp(tk.Tk):
             location.devices.pop()
             self.refresh_dsl_preview()
 
+    def show_all_devices(self):
+        if not self.place:
+            return
+
+        dlg = tk.Toplevel(self)
+        dlg.title("All Devices")
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.attributes("-topmost", True)
+        dlg.columnconfigure(0, weight=1)
+        dlg.rowconfigure(1, weight=1)
+
+        ttk.Label(dlg, text="All Devices", font=("Arial", 12, "bold")).grid(row=0, column=0, padx=10, pady=(10, 5), sticky="w")
+
+        container = ttk.LabelFrame(dlg, text="Devices")
+        container.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
+
+        device_listbox = tk.Listbox(container, height=10)
+        empty_label = ttk.Label(container, text="No devices created yet.")
+        device_items = []
+
+        def refresh_device_list():
+            device_items.clear()
+            device_listbox.delete(0, tk.END)
+            devices = self.get_all_devices()
+            if devices:
+                empty_label.grid_forget()
+                device_listbox.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+                for dev, loc in devices:
+                    device_items.append((dev, loc))
+                    loc_name = loc.name if loc else "No Location"
+                    device_listbox.insert(tk.END, f"{dev.name} ({dev.device_type}) - {loc_name}")
+            else:
+                device_listbox.grid_forget()
+                empty_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
+
+        def edit_selected_device():
+            if not device_items:
+                messagebox.showinfo("No Devices", "There are no devices to edit.", parent=dlg)
+                return
+            idx = self.get_selected_index(device_listbox)
+            if idx is None:
+                messagebox.showwarning("Select Device", "Please select a device to edit.", parent=dlg)
+                return
+            device, location = device_items[idx]
+            self.open_edit_device_dialog(device, location, on_save=refresh_device_list, parent=dlg)
+
+        refresh_device_list()
+
+        ttk.Button(dlg, text="Edit Device", command=edit_selected_device).grid(row=2, column=0, padx=10, pady=(5, 10), sticky="e")
+
+        dlg.update_idletasks()
+        dlg.minsize(380, dlg.winfo_reqheight())
+        self.wait_window(dlg)
+
     # -----------------------------
     # Rules & Scenes
     # -----------------------------
@@ -436,6 +495,72 @@ class SmartHomeApp(tk.Tk):
         dlg.minsize(dlg.winfo_reqwidth(), dlg.winfo_reqheight())
         self.wait_window(dlg)
 
+    def open_edit_device_dialog(self, device, current_location, on_save=None, parent=None):
+        dlg = tk.Toplevel(self)
+        dlg.title("Edit Device")
+        dlg.transient(parent or self)
+        dlg.grab_set()
+        dlg.attributes("-topmost", True)
+
+        dlg.columnconfigure(1, weight=1)
+
+        ttk.Label(dlg, text="Device Name:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        name_entry = ttk.Entry(dlg)
+        name_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+        name_entry.insert(0, device.name)
+
+        ttk.Label(dlg, text="Device Type:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        device_type_combo = ttk.Combobox(dlg, values=DEVICE_TYPES, state="readonly")
+        device_type_combo.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+        if device.device_type and device.device_type in DEVICE_TYPES:
+            device_type_combo.set(device.device_type)
+        elif DEVICE_TYPES:
+            device_type_combo.current(0)
+
+        ttk.Label(dlg, text="Location:").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+        loc_combo = ttk.Combobox(dlg, values=[loc.name for loc in self.place.locations], state="readonly")
+        loc_combo.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
+        if current_location:
+            loc_combo.set(current_location.name)
+        elif loc_combo["values"]:
+            loc_combo.current(0)
+
+        def save_changes():
+            new_name = name_entry.get().strip()
+            new_type = device_type_combo.get()
+            loc_name = loc_combo.get()
+
+            if not new_name or not new_type or not loc_name:
+                messagebox.showerror("Error", "All fields are required.", parent=dlg)
+                return
+
+            target_location = next((l for l in self.place.locations if l.name == loc_name), None)
+            if not target_location:
+                messagebox.showerror("Error", "Selected location does not exist.", parent=dlg)
+                return
+
+            device.name = new_name
+            device.device_type = new_type
+
+            if current_location and target_location.id != current_location.id:
+                current_location.remove_device(device)
+                target_location.add_device(device)
+            elif not current_location:
+                target_location.add_device(device)
+            else:
+                device.location = target_location
+
+            if on_save:
+                on_save()
+            self.refresh_dsl_preview()
+            dlg.destroy()
+
+        ttk.Button(dlg, text="Save Changes", command=save_changes).grid(row=3, column=0, columnspan=2, padx=10, pady=10)
+
+        dlg.update_idletasks()
+        dlg.minsize(350, dlg.winfo_reqheight())
+        self.wait_window(dlg)
+
     # -----------------------------
     # DSL Preview
     # -----------------------------
@@ -482,6 +607,13 @@ class SmartHomeApp(tk.Tk):
     # -----------------------------
     # Utilities
     # -----------------------------
+    def get_all_devices(self):
+        devices = []
+        for loc in getattr(self.place, "locations", []):
+            for dev in getattr(loc, "devices", []):
+                devices.append((dev, loc))
+        return devices
+
     def get_selected_index(self, listbox):
         try:
             return listbox.curselection()[0]
