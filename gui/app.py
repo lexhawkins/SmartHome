@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
-from tkinter import font as tkfont
 from models.models import *
 from models.constants import DEVICE_TYPES, DEVICE_FUNCTIONALITIES, ACTIONS_WITH_ARGS
 import os
@@ -17,13 +16,13 @@ class SmartHomeApp(tk.Tk):
         self.title("SmartHome DSL Editor")
         self.geometry("1000x600")
         self.minsize(900, 500)
+        self.configure(bg="#4d82bc")
+        self.style = ttk.Style(self)
+        self.style.configure("Main.TFrame", background="#4d82bc")
+        self.style.configure("Main.TLabel", background="#4d82bc", foreground="white")
 
-        self.configure_theme()
-
-        # Layout
-        self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=2)
-        self.rowconfigure(0, weight=1)
+        # Layout with scrollable container
+        self.setup_scrollable_layout()
 
         # Panels
         self.create_left_panel()
@@ -32,70 +31,53 @@ class SmartHomeApp(tk.Tk):
         # Initial prompt
         self.prompt_place_setup()
 
-    def configure_theme(self):
-        # Palette
-        self.primary_color = "#1f4b99"
-        self.primary_soft = "#2f6eb0"
-        self.bg_color = "#f6f8fb"
-        self.panel_bg = "#ffffff"
-        self.text_color = "#1f2937"
-        self.muted_color = "#6b7280"
-        self.border_color = "#d5dce7"
+    # -----------------------------
+    # Main Layout (scrollable)
+    # -----------------------------
+    def setup_scrollable_layout(self):
+        self.container = ttk.Frame(self, style="Main.TFrame")
+        self.container.pack(fill="both", expand=True)
 
-        # Fonts
-        self.title_font = tkfont.Font(family="Times New Roman", size=18, weight="bold")
-        self.section_font = tkfont.Font(family="Times New Roman", size=12, weight="bold")
-        self.body_font = tkfont.Font(family="Times New Roman", size=10)
+        self.canvas = tk.Canvas(self.container, highlightthickness=0, bg="#4d82bc")
+        self.canvas.pack(side="left", fill="both", expand=True)
 
-        self.configure(bg=self.bg_color)
+        self.v_scrollbar = ttk.Scrollbar(self.container, orient="vertical", command=self.canvas.yview)
+        self.v_scrollbar.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=self.v_scrollbar.set)
 
-        style = ttk.Style(self)
-        style.theme_use("clam")
-        style.configure("TFrame", background=self.panel_bg)
-        style.configure("TLabelframe", background=self.panel_bg, bordercolor=self.border_color)
-        style.configure("TLabelframe.Label", background=self.panel_bg, foreground=self.text_color, font=self.section_font)
-        style.configure("TLabel", background=self.panel_bg, foreground=self.text_color, font=self.body_font)
-        style.configure("TButton", font=self.body_font, padding=(6, 4), background=self.primary_color, foreground="#ffffff")
-        style.map(
-            "TButton",
-            background=[("active", self.primary_soft), ("pressed", self.primary_soft)],
-            foreground=[("disabled", self.muted_color)],
+        self.content_frame = ttk.Frame(self.canvas, style="Main.TFrame")
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.content_frame, anchor="nw")
+
+        # Keep scrollregion and width synced
+        self.content_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         )
-        style.configure("TEntry", fieldbackground=self.panel_bg, foreground=self.text_color)
-        style.configure("TCombobox", fieldbackground=self.panel_bg, foreground=self.text_color, padding=4)
-        style.map("TCombobox", fieldbackground=[("readonly", self.panel_bg)], fieldforeground=[("readonly", self.text_color)])
+        self.canvas.bind(
+            "<Configure>",
+            lambda e: self.canvas.itemconfigure(self.canvas_window, width=e.width)
+        )
 
-    def style_toplevel(self, dlg):
-        dlg.configure(bg=self.bg_color)
-
+        # Grid weights inside scrollable area
+        self.content_frame.columnconfigure(0, weight=1)
+        self.content_frame.columnconfigure(1, weight=2)
+        self.content_frame.rowconfigure(0, weight=1)
 
     # -----------------------------
     # Left Panel
     # -----------------------------
     def create_left_panel(self):
-        frame = ttk.Frame(self, padding=12)
+        frame = ttk.Frame(self.content_frame, padding=10, style="Main.TFrame")
         frame.grid(row=0, column=0, sticky="nsew")
 
-        ttk.Label(frame, text="SmartHome DSL Editor", font=self.title_font, foreground=self.primary_color).pack(
-            anchor="w", pady=(0, 12)
+        ttk.Label(frame, text="SmartHome DSL Editor", font=("Arial", 16, "bold"), style="Main.TLabel").pack(
+            anchor="w", pady=(0, 10)
         )
 
         # Locations
-        ttk.Label(frame, text="Locations", font=self.section_font).pack(anchor="w")
-        self.location_list = tk.Listbox(
-            frame,
-            height=10,
-            bg=self.bg_color,
-            fg=self.text_color,
-            selectbackground=self.primary_color,
-            selectforeground="#ffffff",
-            highlightthickness=1,
-            highlightbackground=self.border_color,
-            borderwidth=0,
-            activestyle="none",
-            font=self.body_font,
-        )
-        self.location_list.pack(fill="x", pady=6)
+        ttk.Label(frame, text="Locations", font=("Arial", 12, "bold"), style="Main.TLabel").pack(anchor="w")
+        self.location_list = tk.Listbox(frame, height=10)
+        self.location_list.pack(fill="x", pady=5)
 
         self.btn_add_location = ttk.Button(frame, text="Add Location", command=self.add_location)
         self.btn_remove_location = ttk.Button(frame, text="Remove Location", command=self.remove_location)
@@ -103,7 +85,7 @@ class SmartHomeApp(tk.Tk):
         self.btn_remove_location.pack(fill="x", pady=2)
 
         # Devices
-        ttk.Label(frame, text="Devices", font=self.section_font).pack(anchor="w", pady=(10, 0))
+        ttk.Label(frame, text="Devices", font=("Arial", 12, "bold"), style="Main.TLabel").pack(anchor="w", pady=(10, 0))
         self.btn_add_device = ttk.Button(frame, text="Add Device", command=self.add_device)
         self.btn_remove_device = ttk.Button(frame, text="Remove Device", command=self.remove_device)
         self.btn_add_device.pack(fill="x", pady=2)
@@ -112,7 +94,7 @@ class SmartHomeApp(tk.Tk):
         self.btn_view_devices.pack(fill="x", pady=2)
 
         # Rules & Scenes
-        ttk.Label(frame, text="Rules & Scenes", font=self.section_font).pack(anchor="w", pady=(10, 0))
+        ttk.Label(frame, text="Rules & Scenes", font=("Arial", 12, "bold"), style="Main.TLabel").pack(anchor="w", pady=(10, 0))
         self.btn_add_rule = ttk.Button(frame, text="Add Rule", command=self.add_rule)
         self.btn_add_scene = ttk.Button(frame, text="Add Scene", command=self.add_scene)
         self.btn_add_rule.pack(fill="x", pady=2)
@@ -120,7 +102,7 @@ class SmartHomeApp(tk.Tk):
 
         # File actions
         ttk.Separator(frame).pack(fill="x", pady=8)
-        ttk.Label(frame, text="File Operations", font=self.section_font).pack(anchor="w", pady=(10, 0))
+        ttk.Label(frame, text="File Operations", font=("Arial", 12, "bold"), style="Main.TLabel").pack(anchor="w", pady=(10, 0))
         self.btn_create_new = ttk.Button(frame, text="Create New File", command=self.create_new_file)
         self.btn_save = ttk.Button(frame, text="Save file", command=self.save_place_to_file)
         self.btn_save_as = ttk.Button(frame, text="Save As...", command=self.save_place_as)
@@ -136,25 +118,14 @@ class SmartHomeApp(tk.Tk):
     # Right Panel (DSL Preview)
     # -----------------------------
     def create_right_panel(self):
-        frame = ttk.Frame(self, padding=10)
+        frame = ttk.Frame(self.content_frame, padding=10, style="Main.TFrame")
         frame.grid(row=0, column=1, sticky="nsew")
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
 
-        ttk.Label(frame, text="DSL Preview", font=self.section_font, foreground=self.primary_color).grid(row=0, column=0, sticky="w", pady=(0, 5))
+        ttk.Label(frame, text="DSL Preview", font=("Arial", 12, "bold"), style="Main.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 5))
 
-        self.preview_text = tk.Text(
-            frame,
-            wrap="word",
-            state="disabled",
-            bg=self.bg_color,
-            fg=self.text_color,
-            relief="flat",
-            highlightthickness=1,
-            highlightbackground=self.border_color,
-            insertbackground=self.primary_color,
-            font=self.body_font,
-        )
+        self.preview_text = tk.Text(frame, wrap="word", state="disabled")
         self.preview_text.grid(row=1, column=0, sticky="nsew")
 
     # -----------------------------
@@ -222,7 +193,6 @@ class SmartHomeApp(tk.Tk):
 
         dlg = tk.Toplevel(self)
         dlg.title("Add Location")
-        self.style_toplevel(dlg)
 
         # Make dialog modal and always on top
         dlg.transient(self)
@@ -289,7 +259,6 @@ class SmartHomeApp(tk.Tk):
 
         dlg = tk.Toplevel(self)
         dlg.title("Add Device")
-        self.style_toplevel(dlg)
 
         # Make dialog modal and always on top
         dlg.transient(self)
@@ -364,34 +333,21 @@ class SmartHomeApp(tk.Tk):
 
         dlg = tk.Toplevel(self)
         dlg.title("All Devices")
-        self.style_toplevel(dlg)
         dlg.transient(self)
         dlg.grab_set()
         dlg.attributes("-topmost", True)
         dlg.columnconfigure(0, weight=1)
         dlg.rowconfigure(1, weight=1)
 
-        ttk.Label(dlg, text="All Devices", font=self.section_font, foreground=self.primary_color).grid(row=0, column=0, padx=10, pady=(10, 5), sticky="w")
+        ttk.Label(dlg, text="All Devices", font=("Arial", 12, "bold")).grid(row=0, column=0, padx=10, pady=(10, 5), sticky="w")
 
         container = ttk.LabelFrame(dlg, text="Devices")
         container.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
 
-        device_listbox = tk.Listbox(
-            container,
-            height=10,
-            bg=self.bg_color,
-            fg=self.text_color,
-            selectbackground=self.primary_color,
-            selectforeground="#ffffff",
-            highlightthickness=1,
-            highlightbackground=self.border_color,
-            borderwidth=0,
-            activestyle="none",
-            font=self.body_font,
-        )
-        empty_label = ttk.Label(container, text="No devices created yet.", font=self.body_font, foreground=self.muted_color)
+        device_listbox = tk.Listbox(container, height=10)
+        empty_label = ttk.Label(container, text="No devices created yet.")
         device_items = []
 
         def refresh_device_list():
@@ -447,7 +403,6 @@ class SmartHomeApp(tk.Tk):
 
         dlg = tk.Toplevel(self)
         dlg.title("Add Scene")
-        self.style_toplevel(dlg)
         dlg.transient(self)
         dlg.grab_set()
         dlg.attributes("-topmost", True)
@@ -577,7 +532,6 @@ class SmartHomeApp(tk.Tk):
     def open_edit_device_dialog(self, device, current_location, on_save=None, parent=None):
         dlg = tk.Toplevel(self)
         dlg.title("Edit Device")
-        self.style_toplevel(dlg)
         dlg.transient(parent or self)
         dlg.grab_set()
         dlg.attributes("-topmost", True)
