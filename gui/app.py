@@ -1,7 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
 from models.models import *
-from models.constants import DEVICE_TYPES, DEVICE_FUNCTIONALITIES, ACTIONS_WITH_ARGS
+from textx import metamodel_from_file
+from models.constants import SENSOR_EVENTS, DEVICE_TYPES, DEVICE_FUNCTIONALITIES, DEVICE_CATEGORIES, ACTIONS_WITH_ARGS, DETECTOR_FUNCTIONALITIES
 import os
 import re
 
@@ -16,11 +17,13 @@ class SmartHomeApp(tk.Tk):
         self.title("SmartHome DSL Editor")
         self.geometry("1000x600")
         self.minsize(900, 500)
+        self.configure(bg="#4d82bc")
+        self.style = ttk.Style(self)
+        self.style.configure("Main.TFrame", background="#4d82bc")
+        self.style.configure("Main.TLabel", background="#4d82bc", foreground="white")
 
-        # Layout
-        self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=2)
-        self.rowconfigure(0, weight=1)
+        # Layout with scrollable container
+        self.setup_scrollable_layout()
 
         # Panels
         self.create_left_panel()
@@ -30,18 +33,50 @@ class SmartHomeApp(tk.Tk):
         self.prompt_place_setup()
 
     # -----------------------------
+    # Main Layout (scrollable)
+    # -----------------------------
+    def setup_scrollable_layout(self):
+        self.container = ttk.Frame(self, style="Main.TFrame")
+        self.container.pack(fill="both", expand=True)
+
+        self.canvas = tk.Canvas(self.container, highlightthickness=0, bg="#4d82bc")
+        self.canvas.pack(side="left", fill="both", expand=True)
+
+        self.v_scrollbar = ttk.Scrollbar(self.container, orient="vertical", command=self.canvas.yview)
+        self.v_scrollbar.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=self.v_scrollbar.set)
+
+        self.content_frame = ttk.Frame(self.canvas, style="Main.TFrame")
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.content_frame, anchor="nw")
+
+        # Keep scrollregion and width synced
+        self.content_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        self.canvas.bind(
+            "<Configure>",
+            lambda e: self.canvas.itemconfigure(self.canvas_window, width=e.width)
+        )
+
+        # Grid weights inside scrollable area
+        self.content_frame.columnconfigure(0, weight=1)
+        self.content_frame.columnconfigure(1, weight=2)
+        self.content_frame.rowconfigure(0, weight=1)
+
+    # -----------------------------
     # Left Panel
     # -----------------------------
     def create_left_panel(self):
-        frame = ttk.Frame(self, padding=10)
+        frame = ttk.Frame(self.content_frame, padding=10, style="Main.TFrame")
         frame.grid(row=0, column=0, sticky="nsew")
 
-        ttk.Label(frame, text="SmartHome DSL Editor", font=("Arial", 16, "bold")).pack(
+        ttk.Label(frame, text="SmartHome DSL Editor", font=("Arial", 16, "bold"), style="Main.TLabel").pack(
             anchor="w", pady=(0, 10)
         )
 
         # Locations
-        ttk.Label(frame, text="Locations", font=("Arial", 12, "bold")).pack(anchor="w")
+        ttk.Label(frame, text="Locations", font=("Arial", 12, "bold"), style="Main.TLabel").pack(anchor="w")
         self.location_list = tk.Listbox(frame, height=10)
         self.location_list.pack(fill="x", pady=5)
 
@@ -51,7 +86,7 @@ class SmartHomeApp(tk.Tk):
         self.btn_remove_location.pack(fill="x", pady=2)
 
         # Devices
-        ttk.Label(frame, text="Devices", font=("Arial", 12, "bold")).pack(anchor="w", pady=(10, 0))
+        ttk.Label(frame, text="Devices", font=("Arial", 12, "bold"), style="Main.TLabel").pack(anchor="w", pady=(10, 0))
         self.btn_add_device = ttk.Button(frame, text="Add Device", command=self.add_device)
         self.btn_remove_device = ttk.Button(frame, text="Remove Device", command=self.remove_device)
         self.btn_add_device.pack(fill="x", pady=2)
@@ -60,7 +95,7 @@ class SmartHomeApp(tk.Tk):
         self.btn_view_devices.pack(fill="x", pady=2)
 
         # Rules & Scenes
-        ttk.Label(frame, text="Rules & Scenes", font=("Arial", 12, "bold")).pack(anchor="w", pady=(10, 0))
+        ttk.Label(frame, text="Rules & Scenes", font=("Arial", 12, "bold"), style="Main.TLabel").pack(anchor="w", pady=(10, 0))
         self.btn_add_rule = ttk.Button(frame, text="Add Rule", command=self.add_rule)
         self.btn_add_scene = ttk.Button(frame, text="Add Scene", command=self.add_scene)
         self.btn_add_rule.pack(fill="x", pady=2)
@@ -68,7 +103,7 @@ class SmartHomeApp(tk.Tk):
 
         # File actions
         ttk.Separator(frame).pack(fill="x", pady=8)
-        ttk.Label(frame, text="File Operations", font=("Arial", 12, "bold")).pack(anchor="w", pady=(10, 0))
+        ttk.Label(frame, text="File Operations", font=("Arial", 12, "bold"), style="Main.TLabel").pack(anchor="w", pady=(10, 0))
         self.btn_create_new = ttk.Button(frame, text="Create New File", command=self.create_new_file)
         self.btn_save = ttk.Button(frame, text="Save file", command=self.save_place_to_file)
         self.btn_save_as = ttk.Button(frame, text="Save As...", command=self.save_place_as)
@@ -78,18 +113,22 @@ class SmartHomeApp(tk.Tk):
         self.btn_save_as.pack(fill="x", pady=2)
         self.btn_open.pack(fill="x", pady=2)
 
+        ttk.Separator(frame).pack(fill="x", pady=8)
+        self.btn_validate = ttk.Button(frame, text="Validate and Start SmartHome", command=self.validate_and_run)
+        self.btn_validate.pack(fill="x", pady=2)
+
         self.disable_all_actions()
 
     # -----------------------------
     # Right Panel (DSL Preview)
     # -----------------------------
     def create_right_panel(self):
-        frame = ttk.Frame(self, padding=10)
+        frame = ttk.Frame(self.content_frame, padding=10, style="Main.TFrame")
         frame.grid(row=0, column=1, sticky="nsew")
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
 
-        ttk.Label(frame, text="DSL Preview", font=("Arial", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 5))
+        ttk.Label(frame, text="DSL Preview", font=("Arial", 12, "bold"), style="Main.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 5))
 
         self.preview_text = tk.Text(frame, wrap="word", state="disabled")
         self.preview_text.grid(row=1, column=0, sticky="nsew")
@@ -216,8 +255,7 @@ class SmartHomeApp(tk.Tk):
     # -----------------------------
     # Device Handlers
     # -----------------------------
-    # TODO: Update to support device types
-    # TODO: DOCUMENT CHANGE
+
     def add_device(self):
         if not self.place or not self.place.locations:
             messagebox.showwarning("Error", "Create at least one location first.")
@@ -354,13 +392,219 @@ class SmartHomeApp(tk.Tk):
     # Rules & Scenes
     # -----------------------------
     def add_rule(self):
-        if not self.place:
+        if not self.place or not self.place.locations:
+            messagebox.showwarning("No Locations", "Create at least one location before adding rules.")
             return
-        name = simpledialog.askstring("Add Rule", "Rule name:")
-        condition = simpledialog.askstring("Rule Condition", "Enter condition:") if name else None
-        if name and condition:
-            self.place.rules.append(Rule(name=name, condition=condition))
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Add Rule")
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.attributes("-topmost", True)
+        dlg.columnconfigure(1, weight=1)
+
+        # -------------------
+        # Rule Name
+        # -------------------
+        tk.Label(dlg, text="Rule Name:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        name_entry = tk.Entry(dlg)
+        name_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+
+        # -------------------
+        # Condition
+        # -------------------
+        tk.Label(dlg, text="Condition:").grid(row=1, column=0, sticky="nw", padx=5, pady=5)
+        condition_frame = tk.Frame(dlg)
+        condition_frame.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+
+        detector_devices = [
+            d.name for loc in self.place.locations for d in loc.devices
+            if d.device_type in DEVICE_CATEGORIES["Detector"]
+        ]
+
+        condition_device_combo = ttk.Combobox(condition_frame, values=detector_devices, state="readonly")
+        condition_device_combo.grid(row=0, column=0, padx=2, pady=2)
+
+        condition_type_combo = ttk.Combobox(condition_frame, state="readonly")
+        condition_type_combo.grid(row=0, column=1, padx=2, pady=2)
+
+        # New combobox for thermostat functionality (temperature)
+        thermo_func_combo = ttk.Combobox(condition_frame, values=["temperature"], state="readonly")
+        thermo_func_combo.grid(row=0, column=2, padx=2, pady=2)
+        thermo_func_combo.grid_remove()
+
+        # Sensor events
+        sensor_event_combo = ttk.Combobox(condition_frame, values=SENSOR_EVENTS, state="readonly")
+        sensor_event_combo.grid(row=0, column=2, padx=2, pady=2)
+        sensor_event_combo.grid_remove()
+
+        # Comparison operators
+        comparison_combo = ttk.Combobox(condition_frame, values=["<", ">", "="], width=3, state="readonly")
+        comparison_combo.grid(row=0, column=3, padx=2, pady=2)
+        comparison_combo.grid_remove()
+
+        # Value entry
+        extra_arg_entry = tk.Entry(condition_frame)
+        extra_arg_entry.grid(row=0, column=4, padx=2, pady=2)
+        extra_arg_entry.grid_remove()
+
+        def update_condition_options(event=None):
+            device_name = condition_device_combo.get()
+            device = next(
+                (d for loc in self.place.locations for d in loc.devices if d.name == device_name),
+                None
+            )
+            if not device:
+                return
+
+            # Reset visibility
+            thermo_func_combo.grid_remove()
+            sensor_event_combo.grid_remove()
+            comparison_combo.grid_remove()
+            extra_arg_entry.grid_remove()
+
+            if device.device_type == "Thermostat":
+                condition_type_combo["values"] = ["detects"]
+                condition_type_combo.current(0)
+
+                thermo_func_combo.grid()       # Show temperature selector
+                thermo_func_combo.current(0)
+
+                comparison_combo.grid()
+                extra_arg_entry.grid()
+
+            elif device.device_type in ["Sensor", "Camera"]:
+                condition_type_combo["values"] = ["detects"]
+                condition_type_combo.current(0)
+
+                sensor_event_combo.grid()
+
+            else:
+                condition_type_combo["values"] = []
+
+        condition_device_combo.bind("<<ComboboxSelected>>", update_condition_options)
+
+        # -------------------
+        # Actions (Do)
+        # -------------------
+        tk.Label(dlg, text="Do:").grid(row=2, column=0, sticky="nw", padx=5, pady=5)
+        actions_frame = tk.Frame(dlg)
+        actions_frame.grid(row=2, column=1, sticky="ew", padx=5, pady=5)
+
+        all_devices = [d.name for loc in self.place.locations for d in loc.devices]
+        action_rows = []
+
+        def add_action_row():
+            row_frame = tk.Frame(actions_frame)
+            row_frame.pack(fill="x", pady=2)
+
+            dev_combo = ttk.Combobox(row_frame, values=all_devices, state="readonly")
+            dev_combo.pack(side="left", padx=2)
+
+            cmd_combo = ttk.Combobox(row_frame, state="readonly")
+            cmd_combo.pack(side="left", padx=2)
+
+            arg_entry = tk.Entry(row_frame, width=15)
+
+            def update_actions(event=None):
+                dev_name = dev_combo.get()
+                device = next(
+                    (d for loc in self.place.locations for d in loc.devices if d.name == dev_name),
+                    None
+                )
+                if device:
+                    cmds = DEVICE_FUNCTIONALITIES.get(device.device_type, [])
+                    cmd_combo["values"] = cmds
+                    if not cmd_combo.get() and cmds:
+                        cmd_combo.current(0)
+
+                    selected_cmd = cmd_combo.get()
+                    if ACTIONS_WITH_ARGS.get(selected_cmd):
+                        arg_entry.pack(side="left", padx=2)
+                    else:
+                        arg_entry.pack_forget()
+
+            dev_combo.bind("<<ComboboxSelected>>", update_actions)
+            cmd_combo.bind("<<ComboboxSelected>>", update_actions)
+
+            action_rows.append({"device": dev_combo, "action": cmd_combo, "arg": arg_entry})
+
+        add_action_row()
+
+        # Add + / - buttons
+        btn_frame = tk.Frame(dlg)
+        btn_frame.grid(row=3, column=1, sticky="e", padx=5, pady=5)
+
+        tk.Button(btn_frame, text="+", command=add_action_row).pack(side="left", padx=2)
+
+        def remove_last_action():
+            if action_rows:
+                row = action_rows.pop()
+                for widget in row.values():
+                    widget.destroy()
+
+        tk.Button(btn_frame, text="-", command=remove_last_action).pack(side="left", padx=2)
+
+        # -------------------
+        # Save button
+        # -------------------
+        def save_rule():
+            name = name_entry.get().strip()
+            dev_name = condition_device_combo.get()
+            cond_type = condition_type_combo.get()
+
+            condition_str = None
+            device = next(
+                (d for loc in self.place.locations for d in loc.devices if d.name == dev_name),
+                None
+            )
+
+            # ---- Thermostat ----
+            if device and device.device_type == "Thermostat":
+                func = thermo_func_combo.get().strip()  # "temperature"
+                op = comparison_combo.get().strip()
+                val = extra_arg_entry.get().strip()
+
+                if func and op and val:
+                    condition_str = f"{dev_name} detects {func} {op} {val}"
+                else:
+                    messagebox.showerror("Error", "Please set thermostat condition (function, operator, value).", parent=dlg)
+                    return
+
+            # ---- Sensor / Camera ----
+            elif device and device.device_type in ["Sensor", "Camera"]:
+                event = sensor_event_combo.get().strip()
+                if event:
+                    condition_str = f"{dev_name} detects {event}"
+                else:
+                    messagebox.showerror("Error", "Please select an event for sensor/camera.", parent=dlg)
+                    return
+
+            # Collect actions
+            action_list = []
+            for act in action_rows:
+                d = act["device"].get()
+                cmd = act["action"].get()
+                arg = act["arg"].get().strip()
+
+                if arg and not arg.isnumeric() and not (arg.startswith('"') and arg.endswith('"')):
+                    arg = f'"{arg}"'
+
+                if d and cmd:
+                    action_list.append(f"{d} {cmd} {arg}".strip())
+
+            if not name or not condition_str:
+                messagebox.showerror("Error", "Rule name or condition is missing.", parent=dlg)
+                return
+
+            self.place.rules.append(
+                Rule(name=f'"{name}"', condition=condition_str, actions=action_list)
+            )
             self.refresh_dsl_preview()
+            dlg.destroy()
+
+        tk.Button(dlg, text="Save", command=save_rule).grid(row=4, column=1, sticky="e", padx=5, pady=5)
+
 
     def add_scene(self):
         if not self.place or not self.place.locations:
@@ -574,35 +818,44 @@ class SmartHomeApp(tk.Tk):
         if not self.place:
             return ""
         
-        lines = [f"place {self.place.name}:", "    // Locations"]
+        lines = [f"place {self.place.name}:"]
 
         # Locations & devices
         for loc in getattr(self.place, "locations", []):
             lines.append(f"    location {loc.name}:")
             for dev in getattr(loc, "devices", []):
-                # Updated format to match new grammar: device Name: DeviceType
                 lines.append(f"        device {dev.name}: {dev.device_type}")
-            lines.append("    end\n")
+            lines.append("    end")
 
         # Rules
         lines.append("    // Rules")
         for rule in getattr(self.place, "rules", []):
-            lines.append(f'    rule "{rule.name}":')
-            lines.append(f"        when {rule.condition}")
-            lines.append("    end\n")
+            lines.append(f"    rule {rule.name}:")
+            lines.append(f"        if {rule.condition}")
+            for action in rule.actions:
+                lines.append(f"            do {action}")
+            lines.append("    end")
 
         # Scenes
         lines.append("    // Scenes")
         for scene in getattr(self.place, "scenes", []):
+            # Scene header with quotes and location
             lines.append(f'    scene "{scene.name}" at {scene.location}:')
-            for action in getattr(scene, 'actions', []):
-                lines.append(f"        do {action}")  # Each action starts with 'do'
-            lines.append("    end\n")
+            for action in scene.actions:
+                parts = action.split(maxsplit=2)  # e.g., "BedroomSmartSpeaker play_music Metallica"
+                if len(parts) == 3:
+                    device, cmd, arg = parts
+                    # Add quotes if argument is not a number                    
+                    if not arg.replace('.', '', 1).isdigit() and not (arg.startswith('"') and arg.endswith('"')):
+                        arg = f'"{arg.strip()}"'
+                    lines.append(f"        do {device} {cmd} {arg}")
+                else:
+                    lines.append(f"        do {action}")
+            lines.append("    end")
 
 
         lines.append("end")
         return "\n".join(lines)
-
 
     # -----------------------------
     # Utilities
@@ -679,32 +932,90 @@ class SmartHomeApp(tk.Tk):
     def parse_dsl(self, text):
         lines = [l.split("//")[0].rstrip() for l in text.splitlines() if l.strip()]
         place = None
-        current_loc = None
+        current_context = None  # Can be a location, rule, or scene
+
         re_place = re.compile(r"^\s*place\s+([A-Za-z0-9_\-]+)\s*:", re.IGNORECASE)
         re_location = re.compile(r"^\s*location\s+([A-Za-z0-9_\-]+)\s*:\s*$", re.IGNORECASE)
         re_device = re.compile(r"^\s*device\s+([A-Za-z0-9_\-]+)\s*:\s*([A-Za-z0-9_\-]+)\s*$", re.IGNORECASE)
+        re_rule = re.compile(r"^\s*rule\s+(\".*\")\s*:", re.IGNORECASE)
+        re_scene = re.compile(r"^\s*scene\s+(\".*\")\s+at\s+([A-Za-z0-9_\-]+)\s*:", re.IGNORECASE)
+        re_if = re.compile(r"^\s*if\s+(.*)", re.IGNORECASE)
+        re_do = re.compile(r"^\s*do\s+(.*)", re.IGNORECASE)
+        re_end = re.compile(r"^\s*end\s*$", re.IGNORECASE)
 
         for line in lines:
             line = line.strip()
+
+            # End of a block
+            if re_end.match(line):
+                if isinstance(current_context, (Location, Rule, Scene)):
+                    current_context = None # Exit the current block context
+                continue
+
+            # Inside a block, process its contents
+            if isinstance(current_context, Location) and (m := re_device.match(line)):
+                current_context.add_device(Device(name=m.group(1), device_type=m.group(2)))
+                continue
+            elif isinstance(current_context, Rule) and (m := re_if.match(line)):
+                current_context.condition = m.group(1).strip()
+                continue
+            elif isinstance(current_context, (Rule, Scene)) and (m := re_do.match(line)):
+                current_context.actions.append(m.group(1).strip())
+                continue
+
+            # Top-level block definitions
             if m := re_place.match(line):
                 place = Place(m.group(1))
                 place.locations, place.rules, place.scenes = [], [], []
                 continue
+            if not place: continue
+
             if m := re_location.match(line):
                 loc_name = m.group(1)
-                if not loc_name:
-                    loc_name = "UnnamedLocation"
-                current_loc = Location(name=loc_name)
-                place.locations.append(current_loc)
+                current_context = Location(name=loc_name)
+                place.locations.append(current_context)
                 continue
-            if current_loc and (m := re_device.match(line)):
-                current_loc.devices.append(Device(name=m.group(1), device_type=m.group(2)))
-
+            
+            if m := re_rule.match(line):
+                rule_name = m.group(1)
+                current_context = Rule(name=rule_name)
+                place.rules.append(current_context)
+                continue
+            
+            if m := re_scene.match(line):
+                scene_name, loc_name = m.groups()
+                current_context = Scene(name=scene_name.strip('"'), location=loc_name)
+                place.scenes.append(current_context)
+                continue
 
         if not place:
             place = Place(name=os.path.splitext(os.path.basename(self.place_file or "UnnamedPlace.shl"))[0])
             place.locations, place.rules, place.scenes = [], [], []
         return place
+
+    def validate_and_run(self):
+        """
+        Gets the DSL code from the preview text box, validates it against the
+        textX grammar, and shows a status message to the user.
+        """
+        code = self.preview_text.get("1.0", tk.END)
+
+        # The grammar file is in the parent directory of the 'gui' folder
+        grammar_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "grammar.tx"))
+
+        if not os.path.exists(grammar_file):
+            messagebox.showerror("Error", f"Grammar file not found at: {grammar_file}")
+            return
+
+        try:
+            # Create a metamodel from the grammar file
+            metamodel = metamodel_from_file(grammar_file)
+            # Parse the code from the editor
+            metamodel.model_from_str(code)
+            messagebox.showinfo("Success", "You're SmartHome program is up and running")
+        except Exception as e:
+            messagebox.showerror("Validation Error", f"There seem to be some errors in your program.\n\nDetails: {e}")
+
 
 
 if __name__ == "__main__":
