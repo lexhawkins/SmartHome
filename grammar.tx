@@ -70,7 +70,7 @@ Value:
 RuleFunctionalities:
       'temperature'
     | 'movement'
-    | 'sound'
+    | 'noise'
     | 'light'
 ;
 
