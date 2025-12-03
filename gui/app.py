@@ -126,12 +126,13 @@ class SmartHomeApp(tk.Tk):
         frame = ttk.Frame(self.content_frame, padding=10, style="Main.TFrame")
         frame.grid(row=0, column=1, sticky="nsew")
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
 
         ttk.Label(frame, text="DSL Preview", font=("Arial", 12, "bold"), style="Main.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 5))
 
         self.preview_text = tk.Text(frame, wrap="word", state="disabled")
         self.preview_text.grid(row=1, column=0, sticky="nsew")
+        self.preview_text.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
 
     # -----------------------------
     # Place Setup
